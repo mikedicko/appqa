@@ -1,87 +1,108 @@
-# appqa — AI QA rounds for any web app
+# appqa — an AI QA teammate for your web app
 
-A Claude Code skill that drives your live web app like a real user, plays with every flow, compares what it finds against your source of truth (Figma designs **or** written specs in Notion), and either **files annotated bug tickets** to your tracker or **fixes the bugs in-session** — with screenshot evidence, red/green annotations that go through a verify-before-publish loop, dedup against your existing tickets and roadmap, and a per-project learning file that gets sharper every round.
+**What it is:** a Claude Code skill that QAs your app like a person would — it logs in, clicks through every flow, compares what it sees against your Figma designs or Notion specs, screenshots and annotates every issue, and files ready-to-fix tickets to your board (or just fixes the bugs itself, committing atomically). **And it learns:** every bug your team files by hand and every ticket you reject teaches it what to hunt for next round.
 
-**Engine vs config:** this repo is the engine (skill + evidence tooling + templates). Everything project-specific — app URL, auth, where designs live, where bugs go, what's intentionally unfinished — lives in a `qa.config.md` **inside each project's own repo**. One engine, any number of projects.
+```
+you:    /appqa — automatically check all parts of the checkout section
+appqa:  *drives the app, compares against your designs, files 6 annotated
+         tickets to your board, each with a fix prompt for the assigned dev*
+```
 
 ---
 
-## Setup (per operator, ~5 min)
+## Get running (4 steps)
 
+### 1. Install (per operator, ~2 min)
 ```bash
 git clone https://github.com/mikedicko/appqa.git ~/appqa
 mkdir -p ~/.claude/skills
 ln -s ~/appqa/skills/appqa ~/.claude/skills/appqa
 ```
 
-### Connect your MCP servers (required before the first round)
+### 2. Connect your tools (~5 min)
+The skill files bugs through MCP connectors — **without them it can find bugs but can't file them.**
 
-The skill posts bugs to your tracker and reads your designs through MCP connectors — **without them it can find bugs but can't file them or compare against designs.**
+**Notion (if your bug board is in Notion) — required:**
+1. In Claude Code run `/mcp` (desktop app: Settings → Connectors) → add **Notion**.
+2. Authorize the workspace, then in Notion grant the integration access to the bug board itself (database page → ••• → Connections).
+3. Verify: ask Claude *"fetch my bug board and list the last 3 tickets."* If it reads them, it can write them.
 
-**Notion (the tracker — required if your bug board is in Notion):**
-1. In Claude Code, run `/mcp` (or in the desktop app: Settings → Connectors) and add the **Notion** connector.
-2. Authorize it against the workspace that contains your bug board, and make sure the integration is granted access to that board's database (in Notion: the database page → ••• → Connections).
-3. Verify: ask Claude *"fetch my bug board and list the last 3 tickets"*. If it can read them, it can also create and update them.
+**Figma (if designs are your source of truth):** add the official **Figma MCP** connector, signed into an account with file access.
 
-**Figma (required if designs are your source of truth):** add the official **Figma MCP** connector the same way and sign in to an account with access to the design file.
+**Linear / GitHub Issues:** connect that MCP instead and point the config's tracker section at it.
 
-**Linear / GitHub Issues:** connect the matching MCP instead of Notion; set the tracker section of `qa.config.md` accordingly.
+### 3. Configure your project (~10 min, once per project)
+Drop a `qa.config.md` in your project repo — it tells the engine everything project-specific: app URL, auth recipe, source of truth, tracker mapping, report-vs-fix mode, what's intentionally unfinished. Copy `templates/qa.config.md` and fill it in, **or just run `/appqa` and let the skill interview you and write it.**
 
-### Browser access — how the skill drives your app
+Also copy `templates/BUG_PATTERNS.md` to your repo — that's the learning file (more below).
 
-The skill controls a real browser and authenticates as **you**, using a session token you hand it for that session:
+**Figma projects — register your sections:** in Figma **Dev Mode**, select a **section** (e.g. "Checkout", "Settings") on the canvas, copy the **MCP link** from the right-hand panel, paste it to Claude and say what it is — it saves to the config's section map. Sections only: ❌ full-page links time out on the Figma MCP; ❌ individual elements are too granular (component sets aren't gospel — page designs are). Repeat per app section.
 
-1. Log in to your app normally in Chrome.
-2. Open DevTools → **Application → Cookies** → find your session cookie (the config's auth recipe names it — e.g. `session`, `auth`, `token`).
-3. When the round starts, the skill asks for the value — paste it in. It's injected into the QA browser for this session only, never stored or committed.
+### 4. First round — see what it can do
+How the skill authenticates as you: log into your app in Chrome → DevTools → **Application → Cookies** → copy the session cookie named in your auth recipe → paste it when the skill asks. Used for that session only, never stored.
 
-Browser engines, in order of preference: any headless browser tooling already installed in your Claude Code setup; the **Claude in Chrome** extension (you watch it click in real time — note some sites, e.g. crypto/wallet apps, are blocked by its safety rules); or the **reverse workflow** as the universal fallback — the skill hands you an exact shot list, you paste screenshots, it annotates and files. Document which works for your app in `qa.config.md`'s known-quirks section after the first round.
-
-> Tip: token expiry matters. If your session tokens are short-lived, the smoothest long-term setup is an env-gated QA auto-login on staging (e.g. `?qa_token=…`) — put whatever your team builds into the auth recipe.
-
-## Onboarding a project (~10 min, once)
-
-1. Copy `templates/qa.config.md` into the project repo root as `qa.config.md` and fill it in (app URL + auth recipe, source of truth, tracker mapping, report-vs-fix mode, evidence hosting, intentionally-unfinished list).
-   - Or skip this: run `/appqa` in the project and the skill will interview you and scaffold the config itself.
-2. Copy `templates/BUG_PATTERNS.md` to the path you named in the config — this becomes the project's learning file.
-3. Decide evidence hosting. Recommended: an `evidence/` folder in a repo the whole team can read (GitHub renders PNGs — zero sharing friction).
-4. **Figma projects: register your design sections** (see below) so the skill knows exactly which frames are gospel.
-
-Then, in Claude Code from the project directory:
-
+Then try:
 ```
-/appqa
+/appqa — automatically check all parts of the checkout section
 ```
+Other good first prompts:
+- `/appqa full round` — the whole app, every screen, every journey
+- `/appqa re-test the QA column` — verify tickets your devs marked as fixed
+- `/appqa fix mode: the settings screen` — find AND fix, one commit per bug
 
-Give it a scope ("full round", "checkout flow only", "re-test the QA column") and let it run.
+The skill suggests one of these itself the moment your config is scaffolded — take it up on it.
 
-## Adding Figma designs (do this the right way)
+---
 
-The skill needs stable references to your design **sections** — not the whole file, not individual elements.
+## It learns your app
 
-1. Open your design file in **Figma → Dev Mode**.
-2. **Select a section** (e.g. "Wallet", "Onboarding", "Settings") on the canvas — a section, not the page and not a single component.
-3. In the right-hand panel, copy the **MCP link** for that selection.
-4. Paste the link into Claude Code and say what it is (e.g. "this is the Checkout section — save it") — Claude saves it to the project's frame map / memory so every future round can pull those frames directly.
-5. Repeat per section of the app.
+This is the compounding part. Each project keeps a `BUG_PATTERNS.md` — a living catalogue of bug types and team rulings:
 
-**Why sections, specifically:**
-- ❌ **Full page/file links** are too big — the Figma MCP times out trying to enumerate them, and the skill can't tell which part is relevant.
-- ❌ **Individual element/component links** are too granular — components in a library aren't necessarily what's shipped; **page designs are gospel, component sets are not**.
-- ✅ **Section links** are the sweet spot: small enough to fetch, complete enough to compare a whole screen/flow against.
+- **Every bug your team files manually** gets read at the start of each round; new bug *types* are added to the catalogue, so automated checks start hunting for the things your team actually cares about.
+- **Every rejected ticket teaches it what NOT to file.** House rule: reject with a comment saying why — never delete. The skill reads rejections before every round and records the reason ("that's intentional", "that's covered by the Q3 epic", "component sets aren't our source of truth") so the same false positive never comes back.
+- **Every workflow quirk it discovers** (auth gotchas, click-immune components, screens that crash headless browsers) gets appended to the config so future rounds don't re-learn it.
+
+Ten rounds in, it's not a generic QA bot anymore — it's *your* QA bot.
+
+## Triggering rounds automatically (Notion boards)
+
+Native Notion automations can't invoke Claude and can't express "when all tasks in an epic are done" (rollup changes don't fire triggers). The working pattern is a **Claude Code scheduled task** that polls the board and reacts. Two recipes:
+
+**Recipe A — epic completed → QA handoff.** Ask Claude Code:
+> Create a scheduled task that runs weekday mornings: query our Epics database for epics not marked Done; for any epic where every related task is Done, set the epic to Done and add a comment tagging <QA operator> asking them to run `/appqa` scoped to the screens that epic touched, linking this repo's README.
+
+**Recipe B — fixed tickets → auto re-test.** Ask Claude Code:
+> Create a scheduled task that runs daily: if 5 or more tickets on our bug board are in "QA" status, run /appqa in re-test mode against them — verify each fix live in the app, move passes to Done and failures back to In Progress with a comment explaining what still breaks.
+
+Both run from the operator's machine while Claude Code is open (they catch up on next launch if it was closed). Tip: click "Run now" once after creating a scheduled task to pre-approve its tool permissions so future runs never stall.
 
 ## What a round produces
 
-- **Report mode:** tickets in your tracker — plain-English issue → expected → a self-contained fix prompt for the assigned dev's AI (opens with "read this ticket and follow its links") → acceptance bullets → links (annotated screenshot, design/spec, related epic, repro path). Deduped against existing tickets AND your roadmap — it won't file what a planned epic already owns.
-- **Fix mode:** root-caused fixes committed atomically per bug, each verified live in the app before commit, plus a list of anything needing a product decision (asked, not guessed) or out of scope (filed instead).
-- **Evidence:** annotated full-page screenshots (green box = expected, red box = issue) that pass a mandatory render-verify loop before publishing — no mislabeled arrows.
-- **Learning:** every new bug type and every rejected ticket's reason lands in the project's patterns file, so the next round hunts for what YOUR team cares about.
+- **Report mode:** tickets on your board that read like a teammate wrote them — plain-English issue → expected behaviour → a self-contained **fix prompt** for the assigned dev's AI (it opens with "read this ticket and follow its links") → acceptance bullets → links (annotated screenshot, design/spec, related epic, one-line repro path). Deduped against your existing tickets AND your roadmap — it won't file what a planned epic already owns.
+- **Fix mode:** root-caused fixes committed atomically per bug, each verified live in the app before committing; product-decision questions get asked, not guessed; out-of-scope finds get filed instead.
+- **Evidence:** annotated full-page screenshots (green box = expected, red box = issue) that pass a mandatory render-and-verify loop before publishing — no mislabeled arrows, ever.
 
 ## House rules baked into the engine
 
 - Page designs are gospel; Figma component sets are not. In Notion mode, the spec pages are gospel.
 - Re-test "missing" claims live before filing — teams ship between rounds.
-- Never file what the roadmap already owns — cross-reference epics; banner with "defer to epic" when in doubt.
-- Reject-with-comment (never delete) — rejections train the next round.
+- Never file what the roadmap already owns; banner with "defer to epic" when in doubt.
+- Reject-with-comment, never delete — rejections train the next round.
 - Gate visibility server-side: client-hidden data still leaks via the network tab.
 - No real-money / destructive actions unless the project config explicitly allows them.
+
+## Make it yours
+
+The whole engine is markdown and a small Python script — built to be extended. See **[EXTENDING.md](EXTENDING.md)** for where to add team rules, new connectors, new evidence styles, and new triggers, and what belongs in the engine vs your project config.
+
+## Repo map
+
+| Path | What |
+|---|---|
+| `skills/appqa/SKILL.md` | The engine — what Claude actually executes |
+| `templates/qa.config.md` | Per-project config template |
+| `templates/BUG_PATTERNS.md` | Per-project learning-file template |
+| `tools/gen_evidence.py` | Annotated-evidence page generator |
+| `EXTENDING.md` | How to build on top |
+
+MIT licensed — fork it, ship it, PR improvements back.
