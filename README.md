@@ -14,7 +14,30 @@ mkdir -p ~/.claude/skills
 ln -s ~/appqa/skills/appqa ~/.claude/skills/appqa
 ```
 
-Connect the MCP servers your project uses in Claude Code (`/mcp`): Notion and/or Linear for the tracker, the official Figma MCP if designs live there, GitHub for code refs.
+### Connect your MCP servers (required before the first round)
+
+The skill posts bugs to your tracker and reads your designs through MCP connectors — **without them it can find bugs but can't file them or compare against designs.**
+
+**Notion (the tracker — required if your bug board is in Notion):**
+1. In Claude Code, run `/mcp` (or in the desktop app: Settings → Connectors) and add the **Notion** connector.
+2. Authorize it against the workspace that contains your bug board, and make sure the integration is granted access to that board's database (in Notion: the database page → ••• → Connections).
+3. Verify: ask Claude *"fetch my bug board and list the last 3 tickets"*. If it can read them, it can also create and update them.
+
+**Figma (required if designs are your source of truth):** add the official **Figma MCP** connector the same way and sign in to an account with access to the design file.
+
+**Linear / GitHub Issues:** connect the matching MCP instead of Notion; set the tracker section of `qa.config.md` accordingly.
+
+### Browser access — how the skill drives your app
+
+The skill controls a real browser and authenticates as **you**, using a session token you hand it for that session:
+
+1. Log in to your app normally in Chrome.
+2. Open DevTools → **Application → Cookies** → find your session cookie (the config's auth recipe names it — e.g. `session`, `auth`, `token`).
+3. When the round starts, the skill asks for the value — paste it in. It's injected into the QA browser for this session only, never stored or committed.
+
+Browser engines, in order of preference: any headless browser tooling already installed in your Claude Code setup; the **Claude in Chrome** extension (you watch it click in real time — note some sites, e.g. crypto/wallet apps, are blocked by its safety rules); or the **reverse workflow** as the universal fallback — the skill hands you an exact shot list, you paste screenshots, it annotates and files. Document which works for your app in `qa.config.md`'s known-quirks section after the first round.
+
+> Tip: token expiry matters. If your session tokens are short-lived, the smoothest long-term setup is an env-gated QA auto-login on staging (e.g. `?qa_token=…`) — put whatever your team builds into the auth recipe.
 
 ## Onboarding a project (~10 min, once)
 
